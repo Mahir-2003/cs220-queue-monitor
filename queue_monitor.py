@@ -32,11 +32,7 @@ class QueueStats:
 def send_notification(entry_id: str):
     """Send MacOS Notification"""
     net_id = entry_id.split('@')[0]
-    apple_script = f'''display notification 
-    "NetID: {net_id}" 
-    with title "New Student in CS220 Queue" 
-    sound name "Ping"
-    '''
+    apple_script = f'display notification "NetID: {net_id}" with title "New Student in CS220 Queue" sound name "Ping"'
     subprocess.run(['osascript', '-e', apple_script])
 
 
