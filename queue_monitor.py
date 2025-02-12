@@ -13,9 +13,31 @@ dotenv.load_dotenv()
 
 # Spreadsheet IDs and Scope
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID")
-QUEUE_RANGE = 'Form Responses!A2:Z'
+QUEUE_RANGE = 'Form Responses!A2:J10'
 COMPLETE_RANGE = 'Complete!A2:Z'
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+
+
+class QueueStats:
+    def __init__(self):
+        self.total_requests = 0
+        self.start_time = datetime.now()
+        self.last_request_time = None
+
+    def update(self, new_entries):
+        self.total_requests += len(new_entries)
+        self.last_request_time = datetime.now()
+
+
+def send_notification(entry_id: str):
+    """Send MacOS Notification"""
+    net_id = entry_id.split('@')[0]
+    apple_script = f'''display notification 
+    "NetID: {net_id}" 
+    with title "New Student in CS220 Queue" 
+    sound name "Ping"
+    '''
+    subprocess.run(['osascript', '-e', apple_script])
 
 
 def get_credentials():
@@ -39,13 +61,6 @@ def get_credentials():
     return creds
 
 
-def send_notification(entry_id: str):
-    """Send MacOS Notification"""
-    net_id = entry_id.split('@')[0]
-    apple_script = f'''display notification "NetID: {net_id}" with title "New Student in CS220 Queue"'''
-    subprocess.run(['osascript', '-e', apple_script])
-
-
 def get_timestamp(timestamp: str) -> str:
     """ Function to extract just the time from the timestamp in sheet """
     datetime_obj = datetime.strptime(timestamp, "%m/%d/%Y %H:%M:%S")
@@ -57,6 +72,10 @@ def monitor_queue():
     """Notification System"""
     creds = get_credentials()
     service = build("sheets", "v4", credentials=creds)
+
+    # initialize QueueStats() class to track stats
+    stats = QueueStats()
+    print_status(stats)  # initial status
 
     # keep track of seen entries
     seen_entries = set()
@@ -74,29 +93,44 @@ def monitor_queue():
                 print("No data found.")
                 return
 
+            if not values or (len(values[0]) <= 2 and values[0] == ['FALSE', 'FALSE']):
+                # queue is empty, wait and continue
+                time.sleep(30)
+                continue
+
             current_entries = set()
             for row in values:
-                if row[1]:
-                    # create a unique identifier for each entry using email address and timestamp
+                # skip empty or invalid rows
+                if len(row) <= 2:
+                    continue
+
+                # create a unique identifier for each entry using email address and timestamp
+                try:
                     timestamp = get_timestamp(row[2])
                     entry_id = f"{row[3]}-{timestamp}"
                     current_entries.add(entry_id)
+                except (IndexError, ValueError) as e:
+                    # skip malformed rows
+                    continue
 
             new_entries = current_entries - seen_entries
             if new_entries:
+                stats.update(new_entries) # update stats
                 for entry_id in new_entries:
                     send_notification(entry_id)
+                print_status(stats)
 
             # update seen_entries
             seen_entries = current_entries
 
-            time.sleep(10)  # check every 30 seconds
+            # print status every 5 minutes for fun
+            if datetime.now().minute % 5 == 0:
+                print_status(stats)
+
+            time.sleep(30)  # check every 30 seconds
 
         except HttpError as e:
             print(f"HTTP Error: {e}")
-            time.sleep(60)
-        except Exception as e:
-            print(f"An error occurred: {e}")
             time.sleep(60)
 
 
@@ -121,12 +155,26 @@ def get_completed_entries():
 
         print("Checked | Checked In At | Queued At | Student Name | Assignment | Called By")
         for row in values:
-            if row[1]:
-                print(f"{row[0]} | {row[1]} | {row[2]} | {row[4]} | {row[5]} | {row[9]}")
+            if row[0] == 'TRUE':
+                print(f"{row[0]} | {get_timestamp(row[1])} | {get_timestamp(row[2])} | {row[4]} | {row[5]} | {row[9]}")
 
     except HttpError as e:
         print(f"Error: {e}")
 
 
+def print_status(stats: QueueStats):
+    """Print current monitoring status"""
+    print("=== Queue Monitor Status ===")
+    print(f"Running since: {stats.start_time}")
+    print(f"Total requests: {stats.total_requests}")
+    if stats.last_request_time:
+        print(f"Last request: {stats.last_request_time}")
+    else:
+        print("No requests yet")
+    print("==========================\n")
+
+
 if __name__ == '__main__':
+    print("Starting Queue Monitoring...")
     monitor_queue()
+    # get_completed_entries()
