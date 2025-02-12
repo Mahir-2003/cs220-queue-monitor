@@ -21,12 +21,12 @@ SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 class QueueStats:
     def __init__(self):
         self.total_requests = 0
-        self.start_time = datetime.now()
+        self.start_time = datetime.now().strftime("%H:%M:%S")
         self.last_request_time = None
 
     def update(self, new_entries):
         self.total_requests += len(new_entries)
-        self.last_request_time = datetime.now()
+        self.last_request_time = datetime.now().strftime("%H:%M:%S")
 
 
 def send_notification(entry_id: str):
