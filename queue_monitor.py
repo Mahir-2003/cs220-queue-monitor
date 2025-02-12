@@ -1,5 +1,4 @@
 import time
-
 import dotenv
 import os
 from datetime import datetime
@@ -14,7 +13,8 @@ dotenv.load_dotenv()
 
 # Spreadsheet IDs and Scope
 SPREADSHEET_ID = os.environ.get("SPREADSHEET_ID")
-RANGE = 'Complete!A2:Z'
+QUEUE_RANGE = 'Form Responses!A2:Z'
+COMPLETE_RANGE = 'Complete!A2:Z'
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 
@@ -65,7 +65,7 @@ def monitor_queue():
             sheet = service.spreadsheets()
             result = (
                 sheet.values()
-                .get(spreadsheetId=SPREADSHEET_ID, range=RANGE)
+                .get(spreadsheetId=SPREADSHEET_ID, range=QUEUE_RANGE)
                 .execute()
             )
             values = result.get("values", [])
@@ -100,7 +100,7 @@ def monitor_queue():
             time.sleep(60)
 
 
-def main():
+def get_completed_entries():
     """Basic Usage of the Google Sheets API at the moment"""
     creds = get_credentials()
 
@@ -110,7 +110,7 @@ def main():
         sheet = service.spreadsheets()
         result = (
             sheet.values()
-            .get(spreadsheetId=SPREADSHEET_ID, range=RANGE)
+            .get(spreadsheetId=SPREADSHEET_ID, range=COMPLETE_RANGE)
             .execute()
         )
         values = result.get("values", [])
