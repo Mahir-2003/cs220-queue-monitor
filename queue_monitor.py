@@ -30,7 +30,7 @@ class QueueStats:
 
 
 def send_notification(entry_id: str):
-    """Send MacOS Notification"""
+    """Send macOS Notification"""
     net_id = entry_id.split('@')[0]
     apple_script = f'display notification "NetID: {net_id}" with title "New Student in CS220 Queue" sound name "Ping"'
     subprocess.run(['osascript', '-e', apple_script])
@@ -75,6 +75,9 @@ def monitor_queue():
 
     # keep track of seen entries
     seen_entries = set()
+    retry_count = 0
+    base_delay = 30 # base delay in seconds
+
     while True:
         try:
             sheet = service.spreadsheets()
@@ -85,13 +88,17 @@ def monitor_queue():
             )
             values = result.get("values", [])
 
+            # reset retry count on successful request
+            retry_count = 0
+
             if not values:
                 print("No data found.")
+                time.sleep(base_delay)  # no date, sleep before next request
                 return
 
             if not values or (len(values[0]) <= 2 and values[0] == ['FALSE', 'FALSE']):
                 # queue is empty, wait and continue
-                time.sleep(30)
+                time.sleep(base_delay)
                 continue
 
             current_entries = set()
@@ -111,7 +118,7 @@ def monitor_queue():
 
             new_entries = current_entries - seen_entries
             if new_entries:
-                stats.update(new_entries) # update stats
+                stats.update(new_entries)  # update stats
                 for entry_id in new_entries:
                     send_notification(entry_id)
                 print_status(stats)
@@ -120,14 +127,21 @@ def monitor_queue():
             seen_entries = current_entries
 
             # print status every 5 minutes for fun
-            if datetime.now().minute % 5 == 0:
+            # print status every 5 minutes for fun
+            current_minute = datetime.now().minute
+            if current_minute % 5 == 0 and current_minute != last_status_minute:
                 print_status(stats)
+                last_status_minute = current_minute
 
-            time.sleep(30)  # check every 30 seconds
+            time.sleep(base_delay)
 
         except HttpError as e:
             print(f"HTTP Error: {e}")
-            time.sleep(60)
+            # exponential backoff
+            retry_count += 1
+            delay = min(60 * 2 ** retry_count, 300)  # max delay of 5 minutes
+            print(f"Retrying in {delay} seconds...")
+            time.sleep(delay)
 
 
 def get_completed_entries():
